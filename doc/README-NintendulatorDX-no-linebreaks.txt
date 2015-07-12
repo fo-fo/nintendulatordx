@@ -3,7 +3,7 @@
                         NintendulatorDX
                        -----------------
 
-                              v35
+                              v36
 
                        by thefox//aspekt
                         thefox@aspekt.fi
@@ -418,6 +418,21 @@ Miscellaneous
 
 Version History
 ---------------
+
+- v36 (2015-07-12)
+  * NDX searches for source files in the current working directory (previously only relative to the ROM directory)
+  * NDX searches for Lua scripts relative to current working directory.
+  * Menu option added for NTSC/PAL aspect ratio.
+  * NTSC filter support added (blargg's nes_ntsc).
+  * Frame skip option removed.
+  * Color depths other than 32-bit removed.
+  * Diagnostic is shown if invalid black (0xD) is used in rendering.
+  * Improved the implementation of Lua require().
+  * Fixed a bug that caused the A register to be cleared when ndxDebugBreak was used without the debugger window being open.
+  * Fixed some problems with POV axes (patch from Nintendulator main repository)
+  * Lua code can call back into 6502 code (NDX.jsr())
+  * Menu option for darkening borders outside the 90% safe area of the screen.
+
 
 - v35 (2015-02-27)
   * "Expand macros" option.

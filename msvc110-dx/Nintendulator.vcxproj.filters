@@ -27,6 +27,9 @@
     <Filter Include="Source Files\lua-5.2.3">
       <UniqueIdentifier>{09a87436-ca0c-4a26-8d6f-fc8b87e07560}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\nes_ntsc">
+      <UniqueIdentifier>{9464938c-d7e7-440b-9af1-cc54d00fdb6b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\APU.cpp">
@@ -220,6 +223,9 @@
     </ClCompile>
     <ClCompile Include="..\src\lua-5.2.3\src\lzio.c">
       <Filter>Source Files\lua-5.2.3</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\nes_ntsc\nes_ntsc.c">
+      <Filter>Source Files\nes_ntsc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

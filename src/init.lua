@@ -12,6 +12,9 @@ local RAM_metatable = {
     __index = function ( t, k )
         if type( k ) == "string" then
             local syms = NDX.getSymbolValueByName( k )
+            if syms == nil then
+                error( string.format( "Symbol '%s' not found", k ), 2 )
+            end
             if #syms > 1 then
                 error( "More than one symbol returned when indexing " ..
                     "RAM with a symbol (read)", 2 )
@@ -98,7 +101,7 @@ function btn_browse:action()
     if status == "0" then
         -- Result filename in file_dlg.value
         text_filename.value = file_dlg.value
-    elseif status == "-1" then 
+    elseif status == "-1" then
         -- User canceled, nothing to do.
     else
         -- Should never happen.
@@ -190,27 +193,29 @@ function require( what )
     local source = debug.getinfo( 2, "S" ).source
     -- Is it a file name?
     if source:sub( 1, 1 ) == "@" then
-        -- OK, search this directory.
         -- Find the last occurrence of path separator and trim the filename.
         -- The result contains the last path separator.
         local dir = source:sub( 2, 1 + #source - source:reverse():find( "[/\\]" ) )
-        -- Check if the source directory contains "what".
-        local full_path = dir .. what .. ".lua"
-        local file = io.open( full_path )
-        if file then
-            -- OK, found it, load it with the full path.
-            file:close()
-            return dofile( full_path )
-        end
+
+        -- Add the directory into package.path to be searched. Add to the front
+        -- of the string to get priority. Save the old search path.
+        local oldLuaPath = package.path
+        package.path = dir .. "?;" .. dir .. "?.lua;" .. oldLuaPath
+
+        local result = lua_require( what )
+
+        -- Restore old value.
+        package.path = oldLuaPath
+
+        return result
     end
-    -- Let the default require try if the file wasn't found in the source
-    -- directory or a full source filename wasn't specified for the calling
-    -- function.
+    -- Let the default require try if a full source filename wasn't specified
+    -- for the calling function.
     return lua_require( what )
 end
 
 ------------------------------------------------------------------------
- 
+
 -- Display the console.
 dlg_console:show()
 

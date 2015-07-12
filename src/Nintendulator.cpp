@@ -576,6 +576,36 @@ LRESULT CALLBACK	WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DebugExt::memoryWarnings = !DebugExt::memoryWarnings;
             CheckMenuItem( hMenu, ID_DEBUGEXT_MEM_WARNINGS, DebugExt::memoryWarnings ? MF_CHECKED : MF_UNCHECKED );
             break;
+        case ID_DEBUGEXT_NTSC_ASPECT_RATIO:
+            DebugExt::ntscAspectRatio = !DebugExt::ntscAspectRatio;
+            DebugExt::palAspectRatio = false;
+            CheckMenuItem( hMenu, ID_DEBUGEXT_NTSC_ASPECT_RATIO, DebugExt::ntscAspectRatio ? MF_CHECKED : MF_UNCHECKED );
+            CheckMenuItem( hMenu, ID_DEBUGEXT_PAL_ASPECT_RATIO, DebugExt::palAspectRatio ? MF_CHECKED : MF_UNCHECKED );
+            NES::UpdateInterface();
+            break;
+        case ID_DEBUGEXT_PAL_ASPECT_RATIO:
+            DebugExt::palAspectRatio = !DebugExt::palAspectRatio;
+            DebugExt::ntscAspectRatio = false;
+            CheckMenuItem( hMenu, ID_DEBUGEXT_PAL_ASPECT_RATIO, DebugExt::palAspectRatio ? MF_CHECKED : MF_UNCHECKED );
+            CheckMenuItem( hMenu, ID_DEBUGEXT_NTSC_ASPECT_RATIO, DebugExt::ntscAspectRatio ? MF_CHECKED : MF_UNCHECKED );
+            NES::UpdateInterface();
+            break;
+        case ID_DEBUGEXT_MASK_SAFE_AREA:
+            DebugExt::maskSafeArea = !DebugExt::maskSafeArea;
+            CheckMenuItem( hMenu, ID_DEBUGEXT_MASK_SAFE_AREA, DebugExt::maskSafeArea ? MF_CHECKED : MF_UNCHECKED );
+            if ( !NES::Running )
+                GFX::Update();
+            break;
+        case ID_DEBUGEXT_NTSC_FILTER:
+            NES::Stop();
+            GFX::Stop();
+            DebugExt::ntscFilter = !DebugExt::ntscFilter;
+            GFX::Start();
+            if ( running )
+                NES::Start( FALSE );
+            NES::UpdateInterface();
+            CheckMenuItem( hMenu, ID_DEBUGEXT_NTSC_FILTER, DebugExt::ntscFilter ? MF_CHECKED : MF_UNCHECKED );
+            break;
 		case ID_GAME:
 			NES::MapperConfig();
 			break;
@@ -709,8 +739,8 @@ void	UpdateTitlebar (void)
 {
 	TCHAR titlebar[256];
 	if (NES::Running)
-		_stprintf(titlebar, _T("NintendulatorDX - %i FPS (%i %sFSkip)"), GFX::FPSnum, GFX::FSkip, GFX::aFSkip?_T("Auto"):_T(""));
-	else	_tcscpy(titlebar, _T("NintendulatorDX - Stopped"));
+		_stprintf(titlebar, _T("NDX - %i FPS (%i %sFSkip)"), GFX::FPSnum, GFX::FSkip, GFX::aFSkip?_T("Auto"):_T(""));
+	else	_tcscpy(titlebar, _T("NDX - Stopped"));
 	if (TitlebarDelay > 0)
 	{
 		TitlebarDelay--;

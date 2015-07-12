@@ -1704,6 +1704,14 @@ INT_PTR CALLBACK CPUProc (HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		switch (wmId)
 		{
 		case IDC_DEBUG_REG_A:
+            // Hack: If ndxDebugBreak is used when the debug window is not open,
+            // after the debug window is opened the A register gets cleared.
+            // This is caused by an EN_SETFOCUS notification sent to the A
+            // register text field. Proper fix(?) would be to make sure that the
+            // values in textboxes are valid at this point, but for now just
+            // ignore the EN_SETFOCUS.
+            if ( wmEvent == EN_SETFOCUS )
+                break;
 			// Don't bother modifying registers while it's emulating at full speed
 			if (NES::Running)
 				break;

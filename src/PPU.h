@@ -30,6 +30,8 @@ extern unsigned char IsRendering, OnScreen;
 
 extern unsigned long VRAMAddr;
 
+extern bool DidShortenPrerenderScanline;
+
 extern BOOL IsPAL;
 extern unsigned char	VRAM[0x4][0x400];
 extern unsigned char	OpenBus[0x400];

@@ -1,5 +1,5 @@
 // Nintendulator Debugger Extensions (NintendulatorDX)
-// by thefox//aspekt 2010-2014
+// by thefox//aspekt 2010-20xx
 
 // This source is released as is, it's pretty hacky/messy. If I
 // understand GPL right my modifications are infected with GPL as well,
@@ -20,8 +20,6 @@
 // - generate a code/data log
 // - more diagnostic warnings
 //   - if certain PPU regs are written to before warmup
-//   - if color 0xD is used
-//   - if PPU is written to during rendering
 // - use banking info for symbols
 // - fix the bug in Nintendulator where it calculates movie length
 //   by dividing by 60 instead of the correct frame rate (60.098...)
@@ -102,6 +100,7 @@
 #include <cassert>
 #include <random>
 #include <array>
+#include <stack>
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
@@ -245,6 +244,7 @@ static bool call_stack_enabled = false;
 #endif
 static bool abs_addr_diagnostic_shown = false;
 static bool ppu2007WriteDiagnosticShown = false;
+static bool invalidBlackDiagnosticShown = false;
 static ProfilingData profiling_data;
 static MemoryAccessInfo memory_access_info;
 static ActiveLines active_lines;
@@ -292,6 +292,18 @@ bool randomizeMemory;
 
 // Whether to give warnings when uninitialized memory is read.
 bool memoryWarnings;
+
+// Whether to use NTSC aspect ratio (1.143:1) for window sizing.
+bool ntscAspectRatio;
+bool palAspectRatio;
+
+// Whether to mask (darken) a safe area at the borders of the screen, to make
+// it easier to find out whether a game places stuff too close to the borders.
+bool maskSafeArea;
+
+// Whether to enable blargg's NTSC filter. This causes ntscAspectRatio setting
+// to be ignored, and palAspectRatio setting to be interpreted differently.
+bool ntscFilter;
 
 // Whether to log code/data accesses.
 bool generateCodeDataLog = false;
@@ -427,9 +439,21 @@ lua_State* L;
 HANDLE lua_thread_handle = INVALID_HANDLE_VALUE;
 HANDLE lua_trigger_event = INVALID_HANDLE_VALUE;
 HANDLE lua_trigger_done_event = INVALID_HANDLE_VALUE;
+HANDLE luaCallbackReturnEvent = INVALID_HANDLE_VALUE;
 ExDbgObject* lua_trigger_event_object = NULL;
 bool lua_thread_running = false;
 int lua_after_frame_callback_ref = LUA_NOREF;
+
+static std::stack< unsigned short > luaCallbackSavedPc;
+
+const unsigned short kLuaJsrCallbackAddress = 0x4050;
+// +3 because JSR takes 3 bytes
+const unsigned short kLuaJsrCallbackReturn = kLuaJsrCallbackAddress + 3;
+
+// Address that is injected as an JSR
+unsigned short luaCallbackInjectAddress = 0;
+
+bool luaReturnedFromCallback = false;
 
 // Mersenne twister random number generator instance.
 static std::mt19937 rng;
@@ -461,7 +485,7 @@ static void triggerLuaHookLuaThread();
 static stdstring fullPathFromFilename( const stdstring& filename );
 static stdstring stripFilename( const stdstring& filename );
 static std::string strToUpper( const std::string& in_str );
-static void initializeRandom( void* memory, size_t memorySize, unsigned char mask = 0xFF );
+static void initializeRandom( void* memory, size_t memorySize, unsigned char mask = 0xFF, int forbid = -1 );
 static CodeDataLog* getCodeDataLog( int addr );
 
 stdstring GetSourceFileNameFromComboBox(unsigned index)
@@ -757,6 +781,7 @@ void startLuaThread()
     // Default security attributes, auto-reset, default to non-signaled.
     lua_trigger_event = CreateEvent( NULL, FALSE, FALSE, NULL );
     lua_trigger_done_event = CreateEvent( NULL, FALSE, FALSE, NULL );
+    luaCallbackReturnEvent = CreateEvent( NULL, FALSE, FALSE, NULL );
 
     DWORD lua_thread_id = 0;
     // Create a thread for Lua.
@@ -779,6 +804,22 @@ void killLuaThread()
     CloseHandle( lua_trigger_done_event );
 }
 
+void doLuaTrigger()
+{
+    if ( lua_trigger_event_object )
+    {
+        // Got the trigger event. Execute it now.
+        lua_trigger_event_object->triggerLua();
+    }
+    else
+    {
+        // Hacky... if lua_trigger_event_object is 0, call this.
+        triggerLuaHookLuaThread();
+    }
+    // Let the emulator thread know that we're done here.
+    SetEvent( lua_trigger_done_event );
+}
+
 DWORD WINAPI luaThread( void* param )
 {
     loadLuaLibs();
@@ -789,18 +830,7 @@ DWORD WINAPI luaThread( void* param )
         const int TIMEOUT = 10; // ms
         if ( WaitForSingleObject( lua_trigger_event, TIMEOUT ) == WAIT_OBJECT_0 )
         {
-            if ( lua_trigger_event_object )
-            {
-                // Got the trigger event. Execute it now.
-                lua_trigger_event_object->triggerLua();
-            }
-            else
-            {
-                // Hacky... if lua_trigger_event_object is 0, call this.
-                triggerLuaHookLuaThread();
-            }
-            // Let the emulator thread know that we're done here.
-            SetEvent( lua_trigger_done_event );
+            doLuaTrigger();
         }
         // Timeout (or got a trigger event), handle messages.
         IupLoopStep();
@@ -828,6 +858,12 @@ void loadLuaLibs()
     cdlua_open( L );
     cdluaiup_open( L );
     registerLuaFunctions( L );
+}
+
+void stopEmulation()
+{
+    if ( NES::ROMLoaded )
+        NES::DoStop = TRUE;
 }
 
 void FreeExtendedDebugInfo()
@@ -1102,6 +1138,7 @@ void ExDbgLuaExecStr::triggerLua()
     {
         EI.DbgOut( _T( "Lua error: %s" ), cStringToTString( lua_tostring( L, -1 ) ).c_str() );
         lua_pop( L, 1 );
+        stopEmulation();
     }
     else
     {
@@ -1128,6 +1165,7 @@ ExDbgLuaExecFile::ExDbgLuaExecFile( const SymbolMap& symbol_map, const std::vect
     stdstring rom_path_only = fullPathFromFilename( RI.Filename );
 
     std::string full_path = tStringToCString( rom_path_only + source_file_path_only ) + filename;
+    std::string relativePath = tStringToCString( source_file_path_only ) + filename;
 
     //EI.DbgOut( _T( "Full path is %s" ), cStringToTString( full_path.c_str() ).c_str() );
     
@@ -1135,16 +1173,21 @@ ExDbgLuaExecFile::ExDbgLuaExecFile( const SymbolMap& symbol_map, const std::vect
     int err = luaL_loadfile( L, full_path.c_str() );
     if ( err )
     {
-        EI.DbgOut( _T( "Lua error (loadfile): %s" ), cStringToTString( lua_tostring( L, -1 ) ).c_str() );
+        // If load relative to ROM directory failed, try to open relative to
+        // current directory.
+        err = luaL_loadfile( L, relativePath.c_str() );
+        if ( err )
+            EI.DbgOut( _T( "Lua error (loadfile): %s" ), cStringToTString( lua_tostring( L, -1 ) ).c_str() );
     }
-    else
+    
+    if ( !err )
     {
         // Store the function in the Lua registry. This also pops it off the stack.
         func_ref_ = luaL_ref( L, LUA_REGISTRYINDEX );
         // Should never be nil because loadfile succeeded.
         assert( func_ref_ != LUA_REFNIL );
 
-        EI.DbgOut(_T("Loaded embedded Lua script '%s'"), cStringToTString( filename.c_str() ).c_str() );
+        EI.DbgOut( _T( "Loaded embedded Lua script '%s'" ), cStringToTString( relativePath.c_str() ).c_str() );
     }
 }
 
@@ -1171,7 +1214,9 @@ void ExDbgLuaExecFile::triggerLua()
         int error = lua_pcall( L, num_args, num_expected_results, error_handler );
         if ( error )
         {
-            EI.DbgOut( _T( "Lua error (luaExecFile pcall): %s" ), cStringToTString( lua_tostring( L, -1 ) ).c_str() );
+            EI.DbgOut( _T( "Lua error: %s" ), cStringToTString( lua_tostring( L, -1 ) ).c_str() );
+            // Stop emulation on errors.
+            stopEmulation();
         }
         else
         {
@@ -1310,8 +1355,13 @@ void LoadSourceFile(const char *sourcefilename, unsigned line, unsigned source_i
 
         std::wifstream ifs(srcfilepath);
         if(!ifs.is_open()) {
-            EI.DbgOut(_T("Couldn't load source file '%s'"), srcfilepath.c_str());
-            return;
+            // Try to open by using a path relative to current working directory.
+            ifs.open( srcfilestr );
+            if ( !ifs.is_open() )
+            {
+                EI.DbgOut( _T( "Couldn't load source file '%s'" ), srcfilepath.c_str() );
+                return;
+            }
         }
 
         int linenum = 1;
@@ -1651,25 +1701,31 @@ void DebugOutputFromPointer( const unsigned char* text_ptr )
                 int addr = *(unsigned short*)text_ptr;
                 text_ptr += 2;
                 int mem_val = 0;
+                // Number of characters to use.
+                // 0 = no width set
+                int hexWidth = 0;
                 
                 switch( val_size )
                 {
                 case 0:
                     {
                         mem_val = Debugger::DebugMemCPU(addr);
+                        hexWidth = 2;
                         break;
                     }
                 case 1:
                     {
                         mem_val = Debugger::DebugMemCPU(addr) |
                             Debugger::DebugMemCPU((addr + 1) & 0xFFFF) << 8;
+                        hexWidth = 4;
                         break;
                     }
                 }
                 
                 if( hex_or_dec == 0 )
                 {
-                    textss << std::hex << std::uppercase;
+                    textss << std::hex << std::uppercase
+                           << std::setfill( '0' ) << std::setw( hexWidth );
                 }
                 else
                 {
@@ -1834,6 +1890,7 @@ void Reset()
 
     abs_addr_diagnostic_shown = false;
     ppu2007WriteDiagnosticShown = false;
+    invalidBlackDiagnosticShown = false;
 
     watches.clear();
     RebuildWatchList();
@@ -1856,7 +1913,7 @@ void resetHard()
         initializeRandom( NES::CHR_RAM, sizeof( NES::CHR_RAM ) );
         initializeRandom( CPU::RAM, sizeof( CPU::RAM ) );
         initializeRandom( PPU::VRAM, sizeof( PPU::VRAM ) );
-        initializeRandom( PPU::Palette, sizeof( PPU::Palette ), 0x3F );
+        initializeRandom( PPU::Palette, sizeof( PPU::Palette ), 0x3F, 0xD );
         initializeRandom( PPU::Sprite, sizeof( PPU::Sprite ) );
 
         // If SRAM wasn't loaded from file, randomize it as well.
@@ -2655,12 +2712,36 @@ CodeDataLog* getCodeDataLog( int addr )
     return nullptr;
 }
 
+void BeforeExecOp()
+{
+    // Don't handle ExDbgObjects again if we returned from a 6502 callback
+    // to the same address again.
+    if ( !luaReturnedFromCallback )
+        HandleExDbgObjects();
+
+    luaReturnedFromCallback = false;
+}
+
 void ExecOp()
 {
     // Called after a opcode has been executed. CPU::OpAddr is the address of
     // the opcode.
 
-    HandleExDbgObjects();
+    if ( !luaCallbackSavedPc.empty() )
+    {
+        if ( CPU::PC == kLuaJsrCallbackReturn )
+        {
+            // We're done with the callback, let the Lua thread continue
+            // and wait for the original Lua execution to finish.
+            // Restore the PC from before the callback.
+            CPU::PC = luaCallbackSavedPc.top();
+            luaCallbackSavedPc.pop();
+            // \todo Not sure if this thing works correctly.
+            luaReturnedFromCallback = true;
+            SetEvent( luaCallbackReturnEvent );
+            WaitForSingleObject( lua_trigger_done_event, INFINITE );
+        }
+    }
 
     CodeDataLog* cdl = getCodeDataLog( CPU::OpAddr );
     if ( cdl )
@@ -2867,11 +2948,19 @@ unsigned char randomByte()
     return std::uniform_int_distribution< unsigned int >( 0, 255 )( rng );
 }
 
-void initializeRandom( void* memory, size_t memorySize, unsigned char mask )
+void initializeRandom( void* memory, size_t memorySize, unsigned char mask,
+    int forbid )
 {
     unsigned char* ptr = static_cast< unsigned char* >( memory );
     for ( size_t i = 0; i != memorySize; ++i )
-        *ptr++ = randomByte() & mask;
+    {
+        unsigned char newValue = 0;
+        // Get new values until we get one that is not "forbid".
+        // \note Default value of forbid is -1, which means that no values are
+        //       forbidden.
+        do newValue = randomByte() & mask; while ( newValue == forbid );
+        *ptr++ = newValue;
+    }
 }
 
 namespace LuaFunctions
@@ -2903,6 +2992,9 @@ int writeRAM( lua_State* L )
     int addr = lua_tointeger( L, -2 );
     int value = lua_tointeger( L, -1 );
     CPU::WriteRAM( 0, addr, value );
+    // Mark the RAM as written to avoid bogus warnings.
+    memory_access_info[ addr & 0x7FF ] = MEM_WRITTEN;
+
     // Return the number of pushed return values.
     return 0;
 }
@@ -3199,6 +3291,40 @@ int readMemory( lua_State* L )
     return 1;
 }
 
+// Jumps to a subroutine defined in 6502 code.
+int jsr( lua_State* L )
+{
+    int addr = lua_tointeger( L, -1 );
+
+    luaCallbackSavedPc.push( CPU::PC );
+    CPU::PC = kLuaJsrCallbackAddress;
+    luaCallbackInjectAddress = addr;
+
+    // Let the emulator thread run.
+    SetEvent( lua_trigger_done_event );
+
+    // Wait for an event from emulator thread signifying that the execution
+    // has returned to the call site.
+    HANDLE handles[] = {
+        luaCallbackReturnEvent,
+        lua_trigger_event
+    };
+    for ( ;; )
+    {
+        DWORD ret = WaitForMultipleObjects( 2, handles, FALSE, INFINITE );
+        if ( ret == WAIT_OBJECT_0 + 0 ) //luaCallbackReturnEvent
+        {
+            break;
+        }
+        else if ( ret == WAIT_OBJECT_0 + 1 ) //lua_trigger_event
+        {
+            doLuaTrigger();
+        }
+    }
+
+    return 0;
+}
+
 static const luaL_Reg funcs[] =
 {
     { "print", print },
@@ -3216,6 +3342,7 @@ static const luaL_Reg funcs[] =
     { "getMouseState", getMouseState },
     { "getControllerState", getControllerState },
     { "readMemory", readMemory },
+    { "jsr", jsr },
     { NULL, NULL }
 };
 
@@ -3492,6 +3619,23 @@ int readMemory( int addr )
         return result;
 #endif
 
+    if ( !luaCallbackSavedPc.empty() )
+    {
+        // Inject a JSR
+        if ( addr >= kLuaJsrCallbackAddress && addr < kLuaJsrCallbackReturn )
+        {
+            const int kJsrOpcode = 0x20;
+            int relative = addr - kLuaJsrCallbackAddress;
+            switch ( relative )
+            {
+            case 0: return kJsrOpcode;
+            case 1: return luaCallbackInjectAddress & 0xFF;
+            case 2: return luaCallbackInjectAddress >> 8;
+            default: assert( false );
+            }
+        }
+    }
+
     return -1;
 }
 
@@ -3512,6 +3656,18 @@ void writeTo2007WhenRendering()
         CPU::OpAddr );
 
     ppu2007WriteDiagnosticShown = true;
+}
+
+void invalidBlackUsedInRendering()
+{
+    if ( invalidBlackDiagnosticShown )
+        return;
+
+    // \todo May not be safe to call EI.DbgOut from the rendering thread...
+    EI.DbgOut( _T( "Warning: Invalid black ($0D) used in " )
+        _T( "rendering  (further messages suppressed)" ) );
+
+    invalidBlackDiagnosticShown = true;
 }
 
 } // namespace DebugExt

@@ -243,6 +243,7 @@
     <ClCompile Include="..\src\MapperInterface.cpp" />
     <ClCompile Include="..\src\Movie.cpp" />
     <ClCompile Include="..\src\NES.cpp" />
+    <ClCompile Include="..\src\nes_ntsc\nes_ntsc.c" />
     <ClCompile Include="..\src\Nintendulator.cpp" />
     <ClCompile Include="..\src\PPU.cpp" />
     <ClCompile Include="..\src\States.cpp" />

@@ -1091,6 +1091,10 @@ __forceinline	void	IV_AXS (void)
 
 void	ExecOp (void)
 {
+#ifndef	NSFPLAYER
+    DebugExt::BeforeExecOp();
+#endif
+
 	Opcode = MemGetCode(OpAddr = PC++);
 	switch (Opcode)
 	{

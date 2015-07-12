@@ -923,8 +923,16 @@ int	GetConfigButton (HWND hWnd, int DevNum)
 	{
 		FirstAxis = 0x80;
 		LastAxis = 0x90;
-		FirstPOV = 0xC0;
-		LastPOV = 0xF0;
+		if (POVAxis)
+		{
+			FirstPOV = 0xE0;
+			LastPOV = 0xF0;
+		}
+		else
+		{
+			FirstPOV = 0xC0;
+			LastPOV = 0xE0;
+		}
 	}
 
 	if (FAILED(dev->SetCooperativeLevel(hWnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE)))
@@ -1162,10 +1170,8 @@ BOOL	IsPressed (int Button)
 		}
 		else if ((Button & 0xE0) == 0xC0)
 		{	// POV trigger (8-button mode)
-			if (POVAxis)
-				return FALSE;
 			int povNum = (Button >> 3) & 0x3;
-			if (JoyState[DevNum].rgdwPOV[povNum] != -1)
+			if (JoyState[DevNum].rgdwPOV[povNum] == -1)
 				return FALSE;
 			switch (Button & 0x7)
 			{
@@ -1182,7 +1188,7 @@ BOOL	IsPressed (int Button)
 		else if ((Button & 0xE0) == 0xE0)
 		{	// POV trigger (axis mode)
 			int povNum = (Button >> 2) & 0x3;
-			if (JoyState[DevNum].rgdwPOV[povNum] != -1)
+			if (JoyState[DevNum].rgdwPOV[povNum] == -1)
 				return FALSE;
 			switch (Button & 0x03)
 			{

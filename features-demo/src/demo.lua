@@ -17,6 +17,18 @@ end
 
 print( string.format( "Value of symbol 'reset' is $%04X", SYM.reset[ 1 ] ) )
 
+function luaCallbackTest( number )
+    print( string.format( "In luaCallbackTest, got %d", number ) )
+    print( "Calling callbackTest2() in 6502" )
+    NDX.jsr( SYM.callbackTest2[ 1 ] )
+end
+
+-- Lua code can call back into 6502 code. 6502 code can then call back to
+-- Lua as well.
+print( "Calling back to 6502 code from Lua..." )
+NDX.jsr( SYM.callbackTest[ 1 ] )
+print( string.format( "Register A after callback: %d", REG.A ) )
+
 -- Create a dialog with a single button with IUP.
 local press_me_button = iup.button
 {
@@ -47,11 +59,8 @@ function press_me_button:action()
     -- Set a variable in RAM to 1 so the 6502 code may continue.
     RAM.lua_button_pressed = 1
 
-    -- Resume the emulator thread, if it was infact running when
-    -- we called NDX.stop()
-    if was_running then
-        was_stopped = NDX.run()
-    end
+    -- Resume the emulator thread.
+    NDX.run()
 end
 
 -- Render something on the screen while waiting for the button

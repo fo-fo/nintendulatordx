@@ -12,7 +12,7 @@ DEBUG = 1
 ; the values of these variables.
 foo:                .byte 0
 bar:                .word 0
-lua_button_pressed: .byte 0   
+lua_button_pressed: .byte 0
 
 .bss
 
@@ -27,7 +27,7 @@ lua_button_pressed: .byte 0
     jsr stopCodeProfilingDemo
     jsr luaDemo
     jsr debugBreakDemo
-    
+
     jmp *
 .endproc
 
@@ -66,7 +66,7 @@ lua_button_pressed: .byte 0
 .endproc
 
 .proc startCodeProfilingDemo
-    ; Start profiling all of the code executed from now on. 
+    ; Start profiling all of the code executed from now on.
     ndxStartProfiling
     rts
 .endproc
@@ -79,21 +79,21 @@ lua_button_pressed: .byte 0
 
 .proc cycleCountingTimersDemo
     ; Cycle counting timers are only available through registers.
-    
+
     ; Start timer #3. The written value doesn't matter.
     sta $4023
-    
+
     ; Kill some time.
     ldx #0
     more:
         dex
     bne more
-    
+
     ; Stop timer #3. Debugger will then display the amount of elapsed cycles.
     sta $4033
-    
+
     rts
-    
+
     ; Set a title for the timer.
     __timer3_title:
       .asciiz "dummy loop"
@@ -102,7 +102,7 @@ lua_button_pressed: .byte 0
 .proc debugOutputDemo
     ; Output a message to the Debug Information window using a macro.
     ndxDebugOut { "Value of foo is: $", ndxHex8 { foo } }
-    
+
     ; Same thing as above, but now using a register (compatible with every
     ; assembler). Could be wrapped in a macro, too, but will always take
     ; space in the ROM, unlike ndxDebugOut.
@@ -116,26 +116,52 @@ lua_button_pressed: .byte 0
 
 .proc luaDemo
     lda #123
-    
+
     ; print() function prints to the Lua console.
     ndxLuaExecStr "print( 'In Lua, and A is ' .. REG.A )"
-    
+
     ; NDX.print() prints to the Debug Information window.
     ndxLuaExecStr "NDX.print( 'Printing to the Debug Information window from Lua!' )"
-    
+
     ; Now execute a Lua source file. Add an extra NOP by using the
     ; second parameter. This is needed because otherwise the ndxLuaExecFile
     ; would be at the same address as the "wait" label (and would be triggered
     ; by the loop).
     ndxLuaExecFile "demo.lua", 1
-    
+
     ; Wait until the Lua scripts sets the lua_button_pressed
     ; variable as 1.
     wait:
         lda lua_button_pressed
     beq wait
-    
+
     ndxLuaExecStr "print( 'Looks like you pressed the button!' )"
+
+    rts
+.endproc
+
+.proc callbackTest
+    ; This function is called from Lua code. We can call back to Lua again
+    ; from here.
+
+    ndxLuaExecStr "print( 'In callbackTest!' )"
+    ndxLuaExecStr "luaCallbackTest( 12345 )"
+
+    lda #111
+
+    rts
+.endproc
+
+.proc callbackTest2
+    nop
+    nop
+    nop
+
+    ndxLuaExecStr "print( 'In callbackTest2!' )"
+
+    nop
+    nop
+    nop
 
     rts
 .endproc
@@ -155,7 +181,7 @@ lua_button_pressed: .byte 0
 .proc irq
     rti
 .endproc
-    
+
 .segment "CHR"
     .res 8192, 0
 

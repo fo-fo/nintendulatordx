@@ -387,11 +387,15 @@
 #define ID_PPU_MODE_DENDY               32826
 #define ID_DEBUGEXT_RNDMEMORY           35000
 #define ID_DEBUGEXT_MEM_WARNINGS        35001
+#define ID_DEBUGEXT_NTSC_ASPECT_RATIO   35002
+#define ID_DEBUGEXT_PAL_ASPECT_RATIO    35003
+#define ID_DEBUGEXT_MASK_SAFE_AREA      35004
+#define ID_DEBUGEXT_NTSC_FILTER         35005
 
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1

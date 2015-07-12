@@ -51,6 +51,9 @@ unsigned char IOVal;
 unsigned char IOMode;	// Start at 6 for writes, 5 for reads - counts down and eventually hits zero
 unsigned char buf2007;
 
+// True if the prerender scanline (-1) was shortened on this frame.
+bool DidShortenPrerenderScanline;
+
 unsigned char *SprBuff;
 BOOL Spr0InLine;
 int SprCount;
@@ -540,8 +543,15 @@ __inline void	RunNoSkip (int NumTicks)
 			if (SLnum == -1 && !DebugExt::NEVER_SHORTEN_PRERENDER_SCANLINE)
 			{
 				if ((ShortSL) && (IsRendering) && (!IsPAL))
+                {
 					EndSLTicks = 340;
-				else	EndSLTicks = 341;
+                    DidShortenPrerenderScanline = true;
+                }
+                else
+                {
+                    EndSLTicks = 341;
+                    DidShortenPrerenderScanline = false;
+                }
 			}
 			else	EndSLTicks = 341;
 		}
@@ -826,6 +836,11 @@ __inline void	RunNoSkip (int NumTicks)
 #endif	/* SHORQ */
 			*GfxData = (unsigned short)PalIndex;
 			GfxData++;
+
+            // If blacker-than-black black (0x0D) was used, give a warning.
+            // Masked by 0x3F because hi bits may contain emphasis.
+            if ( ( PalIndex & 0x3F ) == 0x0D )
+                DebugExt::invalidBlackUsedInRendering();
 		}
 
         unsigned short borderPalIndex = Palette[0];
@@ -871,7 +886,8 @@ __inline void	RunNoSkip (int NumTicks)
 	}
 }
 
-// \todo Get rid of this.
+// Frameskipping disabled in NDX
+#if 0
 __inline void	RunSkip (int NumTicks)
 {
 	register unsigned char TC;
@@ -1156,6 +1172,7 @@ __inline void	RunSkip (int NumTicks)
 		}
 	}
 }
+#endif
 
 void	Run (void)
 {
@@ -1167,15 +1184,11 @@ void	Run (void)
 			PALsubticks = 0;
 			cycles = 4;
 		}
-		if (GFX::FPSCnt < GFX::FSkip)
-			RunSkip(cycles);
-		else	RunNoSkip(cycles);
+		RunNoSkip(cycles);
 	}
 	else
 	{
-		if (GFX::FPSCnt < GFX::FSkip)
-			RunSkip(3);
-		else	RunNoSkip(3);
+		RunNoSkip(3);
 	}
 }
 

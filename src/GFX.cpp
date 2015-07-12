@@ -15,8 +15,8 @@
 #include "PPU.h"
 #include "AVI.h"
 #include "DebugExt.h"
-#include "NtscFilter.h"
 #include <commctrl.h>
+#include "nes_ntsc/nes_ntsc.h"
 
 #if (_MSC_VER < 1400)
 // newer versions of the DirectX SDK helpfully fail to include ddraw.lib
@@ -40,9 +40,8 @@ unsigned char RawPalette[8][64][3];
 unsigned short Palette15[512];
 unsigned short Palette16[512];
 unsigned long Palette32[512];
-char Depth;
+//char Depth;
 BOOL Fullscreen, Scanlines;
-BOOL NtscFilter; // Permadisabled for now
 
 LARGE_INTEGER ClockFreq;
 LARGE_INTEGER LastClockVal;
@@ -116,7 +115,7 @@ void	Init (void)
 	aFPSnum = 0;
 	FSkip = 0;
 	aFSkip = TRUE;
-	Depth = 0;
+	//Depth = 0;
 	ClockFreq.QuadPart = 0;
 	LastClockVal.QuadPart = 0;
 	PaletteNTSC = PALETTE_NTSC;
@@ -297,21 +296,25 @@ void	Start (void)
 			return;
 		}
 
-        if ( NtscFilter )
+        SurfDesc.dwWidth = 2 * Config::SCREEN_SIZE_X;
+        SurfDesc.dwHeight = 2 * Config::SCREEN_SIZE_Y;
+
+        if ( DebugExt::ntscFilter )
         {
             SurfDesc.dwWidth = Config::NTSC_FILTER_SCREEN_SIZE_X;
             SurfDesc.dwHeight = Config::NTSC_FILTER_SCREEN_SIZE_Y;
         }
-		else if (Scanlines)
-		{
-            SurfDesc.dwWidth = 2 * Config::SCREEN_SIZE_X;
-            SurfDesc.dwHeight = 2 * Config::SCREEN_SIZE_Y;
-		}
-		else
-		{
-            SurfDesc.dwWidth = Config::SCREEN_SIZE_X;
-            SurfDesc.dwHeight = Config::SCREEN_SIZE_Y;
-		}
+
+		//else if (Scanlines)
+		//{
+  //          SurfDesc.dwWidth = 2 * Config::SCREEN_SIZE_X;
+  //          SurfDesc.dwHeight = 2 * Config::SCREEN_SIZE_Y;
+		//}
+		//else
+		//{
+  //          SurfDesc.dwWidth = Config::SCREEN_SIZE_X;
+  //          SurfDesc.dwHeight = Config::SCREEN_SIZE_Y;
+		//}
 		SurfDesc.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
 		SurfDesc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
 
@@ -360,11 +363,12 @@ void	Start (void)
 	Pitch = SurfDesc.lPitch;
 	FPSCnt = FSkip;
 
+    char Depth = 32;
 	switch (SurfDesc.ddpfPixelFormat.dwRGBBitCount)
 	{
-	case 16:if (SurfDesc.ddpfPixelFormat.dwRBitMask == 0xF800)
-			Depth = 16;
-		else	Depth = 15;	break;
+	//case 16:if (SurfDesc.ddpfPixelFormat.dwRBitMask == 0xF800)
+	//		Depth = 16;
+	//	else	Depth = 15;	break;
 	case 32:Depth = 32;		break;
 	default:
 		Stop();
@@ -407,10 +411,10 @@ void	Stop (void)
 
 void	SaveSettings (HKEY SettingsBase)
 {
-	RegSetValueEx(SettingsBase, _T("aFSkip")      , 0, REG_DWORD, (LPBYTE)&aFSkip     , sizeof(BOOL));
+	//RegSetValueEx(SettingsBase, _T("aFSkip")      , 0, REG_DWORD, (LPBYTE)&aFSkip     , sizeof(BOOL));
 	RegSetValueEx(SettingsBase, _T("Scanlines")   , 0, REG_DWORD, (LPBYTE)&Scanlines  , sizeof(BOOL));
 
-	RegSetValueEx(SettingsBase, _T("FSkip")       , 0, REG_DWORD, (LPBYTE)&FSkip      , sizeof(DWORD));
+	//RegSetValueEx(SettingsBase, _T("FSkip")       , 0, REG_DWORD, (LPBYTE)&FSkip      , sizeof(DWORD));
 	RegSetValueEx(SettingsBase, _T("PaletteNTSC") , 0, REG_DWORD, (LPBYTE)&PaletteNTSC, sizeof(DWORD));
 	RegSetValueEx(SettingsBase, _T("PalettePAL")  , 0, REG_DWORD, (LPBYTE)&PalettePAL , sizeof(DWORD));
 	RegSetValueEx(SettingsBase, _T("NTSChue")     , 0, REG_DWORD, (LPBYTE)&NTSChue    , sizeof(DWORD));
@@ -426,8 +430,10 @@ void	LoadSettings (HKEY SettingsBase)
 {
 	unsigned long Size;
 
-	aFSkip = 1;
+    // Frameskipping force-disabled in NDX
+	aFSkip = 0;
 	FSkip = 0;
+
 	PaletteNTSC = PALETTE_NTSC;
 	PalettePAL = PALETTE_PAL;
 	NTSChue = 0;
@@ -441,9 +447,11 @@ void	LoadSettings (HKEY SettingsBase)
 	CheckMenuRadioItem(hMenu, ID_PPU_SLOWDOWN_2, ID_PPU_SLOWDOWN_20, ID_PPU_SLOWDOWN_2, MF_BYCOMMAND);
 
 	Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("Scanlines")  , 0, NULL, (LPBYTE)&Scanlines  , &Size);
-	Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("aFSkip")     , 0, NULL, (LPBYTE)&aFSkip     , &Size);
 
-	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("FSkip")      , 0, NULL, (LPBYTE)&FSkip      , &Size);
+    // NDX force-disables frameskipping
+	//Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("aFSkip")     , 0, NULL, (LPBYTE)&aFSkip     , &Size);
+	//Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("FSkip")      , 0, NULL, (LPBYTE)&FSkip      , &Size);
+
 	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("PaletteNTSC"), 0, NULL, (LPBYTE)&PaletteNTSC, &Size);
 	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("PalettePAL") , 0, NULL, (LPBYTE)&PalettePAL , &Size);
 	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("NTSChue")    , 0, NULL, (LPBYTE)&NTSChue    , &Size);
@@ -530,172 +538,155 @@ void	SetFrameskip (int skip)
 
 void	Draw2x (void)
 {
-	int x, y;
-	register unsigned short *src = PPU::DrawArray;
-	if (Depth == 32)
-	{
-		register unsigned long *dst;
-		for (y = 0; y < 480; y++)
-		{
-			dst = (unsigned long *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x000000;
-			}
-			if (Scanlines && (y & 1))
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = 0x000000;
-					*dst++ = 0x000000;
-				}
-				src += 256;
-			}
-			else
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = Palette32[*src];
-					*dst++ = Palette32[*src];
-					src++;
-				}
-			}
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x000000;
-			}
-			if (!(y & 1))
-				src -= 256;
-		}
-	}
-	else if (Depth == 16)
-	{
-		register unsigned short *dst;
-		for (y = 0; y < 480; y++)
-		{
-			dst = (unsigned short *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x0000;
-			}
-			if (Scanlines && (y & 1))
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = 0x0000;
-					*dst++ = 0x0000;
-				}
-				src += 256;
-			}
-			else
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = Palette16[*src];
-					*dst++ = Palette16[*src];
-					src++;
-				}
-			}
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x0000;
-			}
-			if (!(y & 1))
-				src -= 256;
-		}
-	}
-	else
-	{
-		register unsigned short *dst;
-		for (y = 0; y < 240; y++)
-		{
-			dst = (unsigned short *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x0000;
-			}
-			if (Scanlines && (y & 1))
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = 0x0000;
-					*dst++ = 0x0000;
-				}
-				src += 256;
-			}
-			else
-			{
-				for (x = 0; x < 256; x++)
-				{
-					*dst++ = Palette15[*src];
-					*dst++ = Palette15[*src];
-					src++;
-				}
-			}
-			if (Fullscreen)
-			{
-				for (x = 0; x < FullscreenBorder; x++)
-					*dst++ = 0x0000;
-			}
-			if (!(y & 1))
-				src -= 256;
-		}
-	}
-}
+    int x, y;
+    register unsigned short *src = PPU::DrawArray;
 
-void	Draw1x (void)
-{
-	int x, y;
-	register unsigned short *src = PPU::DrawArray;
-	if (Depth == 32)
-	{
-        // CD canvases are upside down.
-        // \todo Screen size is not 256x240 anymore.
-        const int FIRST_LUA_SCANLINE = DebugExt::LUA_CD_CANVAS_W * ( DebugExt::LUA_CD_CANVAS_H - 1 );
-        unsigned char* lua_src_r = DebugExt::lua_canvas_r + FIRST_LUA_SCANLINE;
-        unsigned char* lua_src_g = DebugExt::lua_canvas_g + FIRST_LUA_SCANLINE;
-        unsigned char* lua_src_b = DebugExt::lua_canvas_b + FIRST_LUA_SCANLINE;
-        unsigned char* lua_src_a = DebugExt::lua_canvas_a + FIRST_LUA_SCANLINE;
-		register unsigned long *dst;
-        for ( y = 0; y < Config::SCREEN_SIZE_Y; y++ )
-		{
-			dst = (unsigned long *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-            for ( x = 0; x < Config::SCREEN_SIZE_X; x++ )
+    // Figure out the X % safe area. Add 50 to round up.
+    const int kSafePercentage = 90;
+    const int kBorderPercentage = 100 - kSafePercentage;
+    const int kDarkBorderWidth  = ( Config::SCREEN_SIZE_X * kBorderPercentage + 50 ) / 200;
+    const int kDarkBorderHeight = ( Config::SCREEN_SIZE_Y * kBorderPercentage + 50 ) / 200;
+    const int kDarkenMultiplier = 96; // out of 256
+    // How many pixels to shift the borders down (added to upper border,
+    // removed from the bottom border)
+    const int kDarkBorderYShift = 0;
+    const int kDarkBorderUpper = kDarkBorderHeight + kDarkBorderYShift;
+    const int kDarkBorderLower = kDarkBorderHeight - kDarkBorderYShift;
+
+    // CD canvases are upside down.
+    const int FIRST_LUA_SCANLINE = DebugExt::LUA_CD_CANVAS_W * ( DebugExt::LUA_CD_CANVAS_H - 1 );
+    // \todo If Lua canvas hasn't been changed, don't blit it.
+    unsigned char* lua_src_r = DebugExt::lua_canvas_r + FIRST_LUA_SCANLINE;
+    unsigned char* lua_src_g = DebugExt::lua_canvas_g + FIRST_LUA_SCANLINE;
+    unsigned char* lua_src_b = DebugExt::lua_canvas_b + FIRST_LUA_SCANLINE;
+    unsigned char* lua_src_a = DebugExt::lua_canvas_a + FIRST_LUA_SCANLINE;
+    register unsigned long *dst1;
+    register unsigned long *dst2;
+    for ( y = 0; y < Config::SCREEN_SIZE_Y; y++ )
+    {
+        dst1 = (unsigned long *)((unsigned char *)SurfDesc.lpSurface + (2*y+0)*Pitch);
+        dst2 = dst1;
+        dst2 = (unsigned long *)((unsigned char *)SurfDesc.lpSurface + (2*y+1)*Pitch);
+        for ( x = 0; x < Config::SCREEN_SIZE_X; x++ )
+        {
+            //*dst++ = Palette32[*src++];
+
+            // Alpha blend Lua canvas on top of emulator image using *lua_src_a. 0 is transparent, 255 is solid.
+            unsigned char res_r = ( *lua_src_r * *lua_src_a + (   Palette32[ *src ] >> 16 )        * ( 255 - *lua_src_a ) ) >> 8;
+            unsigned char res_g = ( *lua_src_g * *lua_src_a + ( ( Palette32[ *src ] >> 8 ) & 255 ) * ( 255 - *lua_src_a ) ) >> 8;
+            unsigned char res_b = ( *lua_src_b * *lua_src_a + (   Palette32[ *src ]        & 255 ) * ( 255 - *lua_src_a ) ) >> 8;
+
+            if ( DebugExt::maskSafeArea )
             {
-				//*dst++ = Palette32[*src++];
+                bool darken = false;
 
-                // Alpha blend Lua canvas on top of emulator image using *lua_src_a. 0 is transparent, 255 is solid.
-                unsigned char res_r = ( *lua_src_r * *lua_src_a + (   Palette32[ *src ] >> 16 )        * ( 255 - *lua_src_a ) ) >> 8;
-                unsigned char res_g = ( *lua_src_g * *lua_src_a + ( ( Palette32[ *src ] >> 8 ) & 255 ) * ( 255 - *lua_src_a ) ) >> 8;
-                unsigned char res_b = ( *lua_src_b * *lua_src_a + (   Palette32[ *src ]        & 255 ) * ( 255 - *lua_src_a ) ) >> 8;
+                if ( x < kDarkBorderWidth || x >= Config::SCREEN_SIZE_X - kDarkBorderWidth )
+                    darken = true;
+                if ( y < kDarkBorderUpper || y >= Config::SCREEN_SIZE_Y - kDarkBorderLower )
+                    darken = true;
 
-                *dst++ = res_r << 16 | res_g << 8 | res_b;
-
-                ++src;
-                ++lua_src_r;
-                ++lua_src_g;
-                ++lua_src_b;
-                ++lua_src_a;
+                if ( darken )
+                {
+                    res_r = res_r * kDarkenMultiplier / 256;
+                    res_g = res_g * kDarkenMultiplier / 256;
+                    res_b = res_b * kDarkenMultiplier / 256;
+                }
             }
-            lua_src_r -= 2 * DebugExt::LUA_CD_CANVAS_W;
-            lua_src_g -= 2 * DebugExt::LUA_CD_CANVAS_W;
-            lua_src_b -= 2 * DebugExt::LUA_CD_CANVAS_W;
-            lua_src_a -= 2 * DebugExt::LUA_CD_CANVAS_W;
+
+            unsigned long pixel = res_r << 16 | res_g << 8 | res_b;
+            *dst1++ = pixel; *dst1++ = pixel;
+            *dst2++ = pixel; *dst2++ = pixel;
+
+            ++src;
+            ++lua_src_r;
+            ++lua_src_g;
+            ++lua_src_b;
+            ++lua_src_a;
+        }
+        lua_src_r -= 2 * DebugExt::LUA_CD_CANVAS_W;
+        lua_src_g -= 2 * DebugExt::LUA_CD_CANVAS_W;
+        lua_src_b -= 2 * DebugExt::LUA_CD_CANVAS_W;
+        lua_src_a -= 2 * DebugExt::LUA_CD_CANVAS_W;
+    }
+
+
+#if 0
+	int x, y;
+	register unsigned short *src = PPU::DrawArray;
+	if (Depth == 32)
+	{
+		register unsigned long *dst;
+		for (y = 0; y < 480; y++)
+		{
+			dst = (unsigned long *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x000000;
+			}
+			if (Scanlines && (y & 1))
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = 0x000000;
+					*dst++ = 0x000000;
+				}
+				src += 256;
+			}
+			else
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = Palette32[*src];
+					*dst++ = Palette32[*src];
+					src++;
+				}
+			}
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x000000;
+			}
+			if (!(y & 1))
+				src -= 256;
 		}
 	}
 	else if (Depth == 16)
 	{
 		register unsigned short *dst;
-		for (y = 0; y < 240; y++)
+		for (y = 0; y < 480; y++)
 		{
 			dst = (unsigned short *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-			for (x = 0; x < 256; x++)
-				*dst++ = Palette16[*src++];
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x0000;
+			}
+			if (Scanlines && (y & 1))
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = 0x0000;
+					*dst++ = 0x0000;
+				}
+				src += 256;
+			}
+			else
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = Palette16[*src];
+					*dst++ = Palette16[*src];
+					src++;
+				}
+			}
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x0000;
+			}
+			if (!(y & 1))
+				src -= 256;
 		}
 	}
 	else
@@ -704,22 +695,81 @@ void	Draw1x (void)
 		for (y = 0; y < 240; y++)
 		{
 			dst = (unsigned short *)((unsigned char *)SurfDesc.lpSurface + y*Pitch);
-			for (x = 0; x < 256; x++)
-				*dst++ = Palette15[*src++];
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x0000;
+			}
+			if (Scanlines && (y & 1))
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = 0x0000;
+					*dst++ = 0x0000;
+				}
+				src += 256;
+			}
+			else
+			{
+				for (x = 0; x < 256; x++)
+				{
+					*dst++ = Palette15[*src];
+					*dst++ = Palette15[*src];
+					src++;
+				}
+			}
+			if (Fullscreen)
+			{
+				for (x = 0; x < FullscreenBorder; x++)
+					*dst++ = 0x0000;
+			}
+			if (!(y & 1))
+				src -= 256;
 		}
 	}
+#endif
 }
 
 void DrawNtscFiltered()
 {
-    unsigned short* src = PPU::DrawArray;
-    for ( int dstY = 0; dstY < Config::NTSC_FILTER_SCREEN_SIZE_Y; ++dstY )
+    static nes_ntsc_t ntsc;
+    static bool ntscInitialized = false;
+
+    // \todo Should be optional.
+    bool mergeFields = false;
+
+    if ( !ntscInitialized )
     {
-        //unsigned long* dst = (unsigned long *)( (unsigned char *)SurfDesc.
-        //    lpSurface + dstY*Pitch );
-        //NtscFilter::FilterScanline( src, dst );
-        src += Config::SCREEN_SIZE_X;
+        ntscInitialized = true;
+        // Other templates: monochrome, composite, svideo, rgb
+        nes_ntsc_setup_t setup = nes_ntsc_composite;
+        setup.merge_fields = mergeFields ? 1 : 0;
+        nes_ntsc_init( &ntsc, &setup );
     }
+
+    static int burstPhase = 0;
+    
+    if ( PPU::DidShortenPrerenderScanline )
+        burstPhase = ( burstPhase + 2 ) % 3;
+    else
+        burstPhase = ( burstPhase + 1 ) % 3;    
+
+    if ( mergeFields )
+        burstPhase = 0;
+
+    // Temporary hack (with twice the processing power requirements) to do the
+    // 2x vertical stretch, since we can't read SurfDesc.lpSurface.
+    // \todo Generate in a temporary buffer, double from there. Or rather start
+    //       using Direct3D for the scaling with controllable filtering.
+    nes_ntsc_blit( &ntsc, PPU::DrawArray, Config::SCREEN_SIZE_X, burstPhase,
+        Config::SCREEN_SIZE_X, Config::SCREEN_SIZE_Y, SurfDesc.lpSurface,
+        2*Pitch );
+    nes_ntsc_blit( &ntsc, PPU::DrawArray, Config::SCREEN_SIZE_X, burstPhase,
+        Config::SCREEN_SIZE_X, Config::SCREEN_SIZE_Y, (char*)SurfDesc.lpSurface + Pitch,
+        2*Pitch );
+
+    // \todo Lua overlay is missing from NTSC filtered output, as are the
+    //       90% safe area borders.
 }
 
 void	Update (void)
@@ -730,11 +780,11 @@ void	Update (void)
 		return;
 	Try(SecondarySurf->Lock(NULL, &SurfDesc, DDLOCK_WAIT | DDLOCK_NOSYSLOCK | DDLOCK_WRITEONLY, NULL), _T("Failed to lock secondary surface"));
 
-    if ( NtscFilter )
+    // \todo Replace with Draw2x (always)
+    if ( DebugExt::ntscFilter )
         DrawNtscFiltered();
-    else if (Fullscreen || Scanlines)
-		Draw2x();
-	else	Draw1x();
+    else
+        Draw2x();
 
 	Try(SecondarySurf->Unlock(NULL), _T("Failed to unlock secondary surface"));
 

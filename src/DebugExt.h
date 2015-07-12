@@ -43,6 +43,7 @@ namespace DebugExt
     void RunCycle();
     void HandleDebuggerBreak( int pc );
     void InvalidateMemoryAccessInfo();
+    void BeforeExecOp();
     void ExecOp();
     void triggerLuaHook();
     void killLuaThread();
@@ -52,6 +53,7 @@ namespace DebugExt
     void writeMemory( int addr, unsigned char data );
 
     void writeTo2007WhenRendering();
+    void invalidBlackUsedInRendering();
 
     const int LUA_CD_CANVAS_W = Config::SCREEN_SIZE_X;
     const int LUA_CD_CANVAS_H = Config::SCREEN_SIZE_Y;
@@ -63,6 +65,10 @@ namespace DebugExt
     extern bool expand_macros;
     extern bool randomizeMemory;
     extern bool memoryWarnings;
+    extern bool ntscAspectRatio;
+    extern bool palAspectRatio;
+    extern bool maskSafeArea;
+    extern bool ntscFilter;
 }
 
 #endif //!DEBUGEXT_H

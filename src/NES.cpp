@@ -1102,12 +1102,43 @@ void	UpdateInterface (void)
     int w = Config::SCREEN_SIZE_X * SizeMult;
     int h = Config::SCREEN_SIZE_Y * SizeMult;
 
-    if ( GFX::NtscFilter )
+    if ( DebugExt::ntscFilter )
     {
-        w = Config::NTSC_FILTER_SCREEN_SIZE_X * SizeMult *
+        w = Config::NTSC_FILTER_SCREEN_SIZE_X * (SizeMult/2.0f) *
             Config::NTSC_FILTER_WINDOW_X_MULT;
-        h = Config::NTSC_FILTER_SCREEN_SIZE_Y * SizeMult *
+        h = Config::NTSC_FILTER_SCREEN_SIZE_Y * (SizeMult/2.0f) *
             Config::NTSC_FILTER_WINDOW_Y_MULT;
+    }
+
+    const float kNtscAspectRatio = 1.143f;
+
+    // Ignore NTSC aspect ratio setting if NTSC filter is enabled, because
+    // the aspect ratio is already ~correct.
+    if ( DebugExt::ntscAspectRatio && !DebugExt::ntscFilter )
+    {
+        // Round by adding 0.5.
+        w = int( w * kNtscAspectRatio + 0.5f );
+    }
+    else if ( DebugExt::palAspectRatio )
+    {
+        const float kPalAspectRatio = 1.3862f;
+        // If NTSC filter is enabled, take into account the NTSC aspect ratio
+        // so that we don't overcorrect. If NTSC filter is disabled, we can
+        // scale from 1:1 AR as usual.
+        if ( DebugExt::ntscFilter )
+        {
+            // nes_ntsc uses a slightly incorrect AR, so use it in correction
+            // to arrive at a more correct result, since might as well.
+            const float kBlarggNesNtscAspectRatio = 664.f / ( 283 * 2 );
+            const float kCorrectedPalAspectRatio = kPalAspectRatio /
+                                                   kBlarggNesNtscAspectRatio;
+            w = int( w * kCorrectedPalAspectRatio + 0.5f );
+        }
+        else
+        {
+            // Round by adding 0.5.
+            w = int( w * kPalAspectRatio + 0.5f );
+        }
     }
 
 	RECT client, window, desktop;
@@ -1164,6 +1195,10 @@ void	SaveSettings (void)
     BOOL dxExpandMacros = DebugExt::expand_macros;
     BOOL dxRandomizeMemory = DebugExt::randomizeMemory;
     BOOL dxMemoryWarnings = DebugExt::memoryWarnings;
+    BOOL dxNtscAspectRatio = DebugExt::ntscAspectRatio;
+    BOOL dxPalAspectRatio = DebugExt::palAspectRatio;
+    BOOL dxMaskSafeArea = DebugExt::maskSafeArea;
+    BOOL dxNtscFilter = DebugExt::ntscFilter;
 
 	if (RegOpenKeyEx(HKEY_CURRENT_USER, _T("SOFTWARE\\Nintendulator\\"), 0, KEY_ALL_ACCESS, &SettingsBase))
 		RegCreateKeyEx(HKEY_CURRENT_USER, _T("SOFTWARE\\Nintendulator\\"), 0, _T("NintendulatorClass"), REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &SettingsBase, NULL);
@@ -1174,6 +1209,10 @@ void	SaveSettings (void)
     RegSetValueEx(SettingsBase, _T("DxExpandMacros"), 0, REG_DWORD, (LPBYTE)&dxExpandMacros, sizeof(BOOL));
     RegSetValueEx(SettingsBase, _T("DxRandomizeMemory"), 0, REG_DWORD, (LPBYTE)&dxRandomizeMemory, sizeof(BOOL));
     RegSetValueEx(SettingsBase, _T("DxMemoryWarnings"), 0, REG_DWORD, (LPBYTE)&dxMemoryWarnings, sizeof(BOOL));
+    RegSetValueEx(SettingsBase, _T("DxNtscAspectRatio"), 0, REG_DWORD, (LPBYTE)&dxNtscAspectRatio, sizeof(BOOL));
+    RegSetValueEx(SettingsBase, _T("DxPalAspectRatio"), 0, REG_DWORD, (LPBYTE)&dxPalAspectRatio, sizeof(BOOL));
+    RegSetValueEx(SettingsBase, _T("DxMaskSafeArea"), 0, REG_DWORD, (LPBYTE)&dxMaskSafeArea, sizeof(BOOL));
+    RegSetValueEx(SettingsBase, _T("DxNtscFilter"), 0, REG_DWORD, (LPBYTE)&dxNtscFilter, sizeof(BOOL));
 
 	RegSetValueEx(SettingsBase, _T("SizeMult")    , 0, REG_DWORD, (LPBYTE)&SizeMult        , sizeof(DWORD));
 	RegSetValueEx(SettingsBase, _T("PosX")        , 0, REG_DWORD, (LPBYTE)&wRect.left      , sizeof(DWORD));
@@ -1217,6 +1256,10 @@ void	LoadSettings (void)
     BOOL dxExpandMacros = TRUE;
     BOOL dxRandomizeMemory = TRUE;
     BOOL dxMemoryWarnings = TRUE;
+    BOOL dxNtscAspectRatio = TRUE;
+    BOOL dxPalAspectRatio = FALSE;
+    BOOL dxMaskSafeArea = FALSE;
+    BOOL dxNtscFilter = FALSE;
 
 	FrameStep = FALSE;
 	Path_ROM[0] = Path_NMV[0] = Path_AVI[0] = Path_PAL[0] = 0;
@@ -1231,6 +1274,10 @@ void	LoadSettings (void)
     Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxExpandMacros"), 0, NULL, (LPBYTE)&dxExpandMacros, &Size);
     Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxRandomizeMemory"), 0, NULL, (LPBYTE)&dxRandomizeMemory, &Size);
     Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxMemoryWarnings"), 0, NULL, (LPBYTE)&dxMemoryWarnings, &Size);
+    Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxNtscAspectRatio"), 0, NULL, (LPBYTE)&dxNtscAspectRatio, &Size);
+    Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxPalAspectRatio"), 0, NULL, (LPBYTE)&dxPalAspectRatio, &Size);
+    Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxMaskSafeArea"), 0, NULL, (LPBYTE)&dxMaskSafeArea, &Size);
+    Size = sizeof(BOOL);	RegQueryValueEx(SettingsBase, _T("DxNtscFilter"), 0, NULL, (LPBYTE)&dxNtscFilter, &Size);
 
 	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("SizeMult")    , 0, NULL, (LPBYTE)&SizeMult       , &Size);
 	Size = sizeof(DWORD);	RegQueryValueEx(SettingsBase, _T("PosX")        , 0, NULL, (LPBYTE)&PosX           , &Size);
@@ -1245,6 +1292,14 @@ void	LoadSettings (void)
     DebugExt::expand_macros = !!dxExpandMacros;
     DebugExt::randomizeMemory = !!dxRandomizeMemory;
     DebugExt::memoryWarnings = !!dxMemoryWarnings;
+    DebugExt::ntscAspectRatio = !!dxNtscAspectRatio;
+    DebugExt::palAspectRatio = !!dxPalAspectRatio;
+    DebugExt::maskSafeArea = !!dxMaskSafeArea;
+    DebugExt::ntscFilter = !!dxNtscFilter;
+    // If NTSC aspect ratio is enabled, don't allow PAL aspect ratio to be
+    // enabled.
+    if ( DebugExt::ntscAspectRatio )
+        DebugExt::palAspectRatio = false;
 
 	Controllers::LoadSettings(SettingsBase);
 	GFX::LoadSettings(SettingsBase);
@@ -1282,6 +1337,18 @@ void	LoadSettings (void)
 
     if ( dxMemoryWarnings )
         CheckMenuItem( hMenu, ID_DEBUGEXT_MEM_WARNINGS, MF_CHECKED );
+
+    if ( DebugExt::ntscAspectRatio )
+        CheckMenuItem( hMenu, ID_DEBUGEXT_NTSC_ASPECT_RATIO, MF_CHECKED );
+
+    if ( DebugExt::palAspectRatio )
+        CheckMenuItem( hMenu, ID_DEBUGEXT_PAL_ASPECT_RATIO, MF_CHECKED );
+
+    if ( DebugExt::maskSafeArea )
+        CheckMenuItem( hMenu, ID_DEBUGEXT_MASK_SAFE_AREA, MF_CHECKED );
+
+    if ( DebugExt::ntscFilter )
+        CheckMenuItem( hMenu, ID_DEBUGEXT_NTSC_FILTER, MF_CHECKED );
 
 	switch (SizeMult)
 	{
